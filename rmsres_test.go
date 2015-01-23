@@ -16,15 +16,15 @@ func ExampleLmFit_RmsRes() {
 	mjd := []float64{56123, 56123.01, 56123.02}
 	s := coord.SphrS{
 		{
-			Ra:  sexa.NewRA(23, 59, 59).Rad(),
+			RA:  sexa.NewRA(23, 59, 59).Rad(),
 			Dec: 0,
 		},
 		{
-			Ra:  sexa.NewRA(0, 0, 1./15).Rad(),
+			RA:  sexa.NewRA(0, 0, 1./15).Rad(),
 			Dec: sexa.NewAngle(false, 0, 0, 1).Rad(),
 		},
 		{
-			Ra:  sexa.NewRA(0, 0, 1).Rad(),
+			RA:  sexa.NewRA(0, 0, 1).Rad(),
 			Dec: 0,
 		},
 	}
@@ -41,7 +41,7 @@ func ExampleLmFit_RmsRes() {
 
 	fmt.Println("\nresiduals, in arc seconds:")
 	for _, r := range res {
-		fmt.Printf("{RA %.2f, Dec %.2f}\n", r.Ra, r.Dec)
+		fmt.Printf("{RA %.2f, Dec %.2f}\n", r.RA, r.Dec)
 	}
 	fmt.Printf("\nrms: %.2f\n", rms)
 

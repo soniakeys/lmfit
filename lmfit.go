@@ -108,10 +108,10 @@ func New(mjd []float64, s coord.SphrS) *LmFit {
 	}
 
 	// normalize ra to near 0 to avoid wraparound problems
-	ra0 := lmf.rs[0].Ra
+	ra0 := lmf.rs[0].RA
 	lmf.ra0 = ra0
 	for i, r1 := range lmf.rs {
-		lmf.rs[i].Ra = math.Mod(r1.Ra+threePi-ra0, twoPi) - math.Pi
+		lmf.rs[i].RA = math.Mod(r1.RA+threePi-ra0, twoPi) - math.Pi
 	}
 
 	// normalize time to near 0 to maintain precision
@@ -124,7 +124,7 @@ func New(mjd []float64, s coord.SphrS) *LmFit {
 
 	if nObs == 2 {
 		lmf.r0 = 0
-		lmf.rr = lmf.rs[1].Ra / lmf.nTime[1]
+		lmf.rr = lmf.rs[1].RA / lmf.nTime[1]
 		lmf.d0 = 0
 		lmf.dr = 0
 	} else {
@@ -132,10 +132,10 @@ func New(mjd []float64, s coord.SphrS) *LmFit {
 		var sumT, sumRA, sumDec, sumT2, sumTRA, sumTDec float64
 		for i, t1 := range lmf.nTime {
 			sumT += t1
-			sumRA += lmf.rs[i].Ra
+			sumRA += lmf.rs[i].RA
 			sumDec += lmf.rs[i].Dec
 			sumT2 += t1 * t1
-			sumTRA += t1 * lmf.rs[i].Ra
+			sumTRA += t1 * lmf.rs[i].RA
 			sumTDec += t1 * lmf.rs[i].Dec
 		}
 		fn := float64(nObs)
@@ -152,7 +152,7 @@ func New(mjd []float64, s coord.SphrS) *LmFit {
 func (lmf *LmFit) Pos(t float64) (p *coord.Sphr) {
 	nt := t - lmf.t0
 	s := &coord.Sphr{
-		Ra:  lmf.r0 + lmf.rr*nt + lmf.ra0,
+		RA:  lmf.r0 + lmf.rr*nt + lmf.ra0,
 		Dec: lmf.d0 + lmf.dr*nt,
 	}
 	var c coord.Cart
@@ -168,7 +168,7 @@ func (lmf *LmFit) Res() coord.SphrS {
 	// observed positions:  copy from rotated observed and fix up ra
 	so := append(coord.SphrS{}, lmf.rs...)
 	for i := range so {
-		so[i].Ra += lmf.ra0
+		so[i].RA += lmf.ra0
 	}
 	// then derotate back up to original place in the sky
 	var c coord.CartS
@@ -178,7 +178,7 @@ func (lmf *LmFit) Res() coord.SphrS {
 	sc := make(coord.SphrS, len(so))
 	for i, nt := range lmf.nTime {
 		sc[i] = coord.Sphr{
-			Ra:  lmf.r0 + lmf.rr*nt + lmf.ra0,
+			RA:  lmf.r0 + lmf.rr*nt + lmf.ra0,
 			Dec: lmf.d0 + lmf.dr*nt,
 		}
 	}
@@ -187,7 +187,7 @@ func (lmf *LmFit) Res() coord.SphrS {
 	// repurpose so to hold residuals
 	for i, so1 := range so {
 		so[i] = coord.Sphr{
-			Ra:  (so1.Ra - sc[i].Ra) * math.Cos(sc[i].Dec) / arcSecRad,
+			RA:  (so1.RA - sc[i].RA) * math.Cos(sc[i].Dec) / arcSecRad,
 			Dec: (so1.Dec - sc[i].Dec) / arcSecRad,
 		}
 	}
@@ -206,7 +206,7 @@ func (lmf *LmFit) RmsRes() (float64, coord.SphrS) {
 	res := lmf.Res()
 	var s float64
 	for _, r1 := range res {
-		s += r1.Ra*r1.Ra + r1.Dec*r1.Dec
+		s += r1.RA*r1.RA + r1.Dec*r1.Dec
 	}
 	return math.Sqrt(s / float64(len(res))), res
 }

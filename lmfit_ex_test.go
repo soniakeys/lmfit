@@ -13,7 +13,7 @@ import (
 
 func sphrString(prec int, s *coord.Sphr) string {
 	return fmt.Sprintf("{RA %2.*s, Dec %2.*s}",
-		prec, sexa.NewFmtRA(s.Ra),
+		prec, sexa.NewFmtRA(s.RA),
 		prec, sexa.NewFmtAngle(s.Dec))
 }
 
@@ -21,8 +21,8 @@ func Example() {
 	// New, with two observations
 	mjd := []float64{56123, 56123.01}
 	s := coord.SphrS{
-		{Ra: 0, Dec: sexa.NewAngle(false, 89, 59, 40).Rad()},
-		{Ra: 0, Dec: sexa.NewAngle(false, 90, 0, 0).Rad()},
+		{RA: 0, Dec: sexa.NewAngle(false, 89, 59, 40).Rad()},
+		{RA: 0, Dec: sexa.NewAngle(false, 90, 0, 0).Rad()},
 	}
 	f := lmfit.New(mjd, s)
 
