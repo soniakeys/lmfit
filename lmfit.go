@@ -174,7 +174,7 @@ func (lmf *LmFit) Res() coord.SphrS {
 	var c coord.CartS
 	so.FromCartS(c.Mult3S(&lmf.mRot, c.FromSphrS(so)))
 
-	// computed positions, derotated similarlly
+	// computed positions, derotated similarly
 	sc := make(coord.SphrS, len(so))
 	for i, nt := range lmf.nTime {
 		sc[i] = coord.Sphr{
