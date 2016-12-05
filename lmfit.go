@@ -7,14 +7,16 @@ import (
 	"math"
 
 	"github.com/soniakeys/coord"
+	"github.com/soniakeys/unit"
 )
 
+/*
 const (
 	twoPi     = 2 * math.Pi
 	threePi   = 3 * math.Pi
 	arcSecRad = math.Pi / (180 * 3600)
 )
-
+*/
 // LmFit represents the linear motion resulting from a great circle fit
 // of a sequence of spherical coordinates.
 // It can be queried for various statistics on the fit and used to generate
@@ -23,29 +25,30 @@ type LmFit struct {
 	// various intermediate values, useful for generating statistics after
 	// the fit is done
 	mRot  coord.M3    // rotation matrix
-	ra0   float64     // ra offset
+	lon0  unit.Angle  // lon (ra) offset
 	rs    coord.SphrS // rotated ra and dec
 	t0    float64     // time offset
 	nTime []float64   // normalized times
 	// fit solution parameters
-	r0, rr, d0, dr float64
+	r0, d0 unit.Angle
+	rr, dr unit.Angle // actually angle/day
 }
 
 // New does the great circle fit.
 //
 // Args:
 //   mjd  -- mjd times of observations
-//   s    -- ra, dec coordinates in radians
-func New(mjd []float64, s coord.SphrS) *LmFit {
+//   s    -- ra, dec coordinates
+func New(mjd []float64, e coord.EquaS) *LmFit {
 	nObs := len(mjd)
-	if nObs < 2 || len(s) != nObs {
+	if nObs < 2 || len(e) != nObs {
 		return nil
 	}
 	var lmf LmFit
 
 	// convert obs to cartesian
 	var c coord.CartS
-	c.FromSphrS(s)
+	c.FromEquaS(e)
 
 	// vector normal to motion
 	var n coord.Cart
@@ -59,7 +62,7 @@ func New(mjd []float64, s coord.SphrS) *LmFit {
 	if tana := xy / n.Z; !(math.Abs(tana) > .0003) {
 		// if n is close to the pole already, don't mess with rotation.
 		lmf.mRot = coord.M3{1, 0, 0, 0, 1, 0, 0, 0, 1} // identity
-		lmf.rs = append(coord.SphrS{}, s...)           // copy
+		lmf.rs = e.SphrS()                             // copy
 	} else {
 		// rotation axis is right angle to n projected onto z=0 plane
 		// and normalized to unit vector
@@ -107,11 +110,11 @@ func New(mjd []float64, s coord.SphrS) *LmFit {
 		lmf.rs.FromCartS(rotated)
 	}
 
-	// normalize ra to near 0 to avoid wraparound problems
-	ra0 := lmf.rs[0].RA
-	lmf.ra0 = ra0
+	// normalize longitude (ra) to near 0 to avoid wraparound problems
+	lon0 := lmf.rs[0].Lon
+	lmf.lon0 = lon0
 	for i, r1 := range lmf.rs {
-		lmf.rs[i].RA = math.Mod(r1.RA+threePi-ra0, twoPi) - math.Pi
+		lmf.rs[i].Lon = (r1.Lon - lon0 + math.Pi).Mod1() - math.Pi
 	}
 
 	// normalize time to near 0 to maintain precision
@@ -124,39 +127,41 @@ func New(mjd []float64, s coord.SphrS) *LmFit {
 
 	if nObs == 2 {
 		lmf.r0 = 0
-		lmf.rr = lmf.rs[1].RA / lmf.nTime[1]
+		lmf.rr = lmf.rs[1].Lon.Div(lmf.nTime[1])
 		lmf.d0 = 0
 		lmf.dr = 0
 	} else {
 		// here's the least squares stuff
-		var sumT, sumRA, sumDec, sumT2, sumTRA, sumTDec float64
+		var sumT, sumT2 float64
+		var sumLon, sumLat, sumTLon, sumTLat unit.Angle
 		for i, t1 := range lmf.nTime {
 			sumT += t1
-			sumRA += lmf.rs[i].RA
-			sumDec += lmf.rs[i].Dec
+			sumLon += lmf.rs[i].Lon
+			sumLat += lmf.rs[i].Lat
 			sumT2 += t1 * t1
-			sumTRA += t1 * lmf.rs[i].RA
-			sumTDec += t1 * lmf.rs[i].Dec
+			sumTLon += lmf.rs[i].Lon.Mul(t1)
+			sumTLat += lmf.rs[i].Lat.Mul(t1)
 		}
 		fn := float64(nObs)
-		invD := 1 / (fn*sumT2 - sumT*sumT)
-		lmf.r0 = invD * (sumRA*sumT2 - sumTRA*sumT)
-		lmf.rr = invD * (fn*sumTRA - sumRA*sumT)
-		lmf.d0 = invD * (sumDec*sumT2 - sumTDec*sumT)
-		lmf.dr = invD * (fn*sumTDec - sumDec*sumT)
+		d := fn*sumT2 - sumT*sumT
+		lmf.r0 = (sumLon.Mul(sumT2) - sumTLon.Mul(sumT)).Div(d)
+		lmf.rr = (sumTLon.Mul(fn) - sumLon.Mul(sumT)).Div(d)
+		lmf.d0 = (sumLat.Mul(sumT2) - sumTLat.Mul(sumT)).Div(d)
+		lmf.dr = (sumTLat.Mul(fn) - sumLat.Mul(sumT)).Div(d)
 	}
 	return &lmf
 }
 
 // Pos returns position at time t with fitted linear motion.
-func (lmf *LmFit) Pos(t float64) (p *coord.Sphr) {
+func (lmf *LmFit) Pos(t float64) *coord.Equa {
 	nt := t - lmf.t0
 	s := &coord.Sphr{
-		RA:  lmf.r0 + lmf.rr*nt + lmf.ra0,
-		Dec: lmf.d0 + lmf.dr*nt,
+		Lon: lmf.r0 + lmf.rr.Mul(nt) + lmf.lon0,
+		Lat: lmf.d0 + lmf.dr.Mul(nt),
 	}
 	var c coord.Cart
-	return s.FromCart(c.Mult3(&lmf.mRot, c.FromSphr(s)))
+	var p coord.Equa
+	return p.FromCart(c.Mult3(&lmf.mRot, c.FromSphr(s)))
 }
 
 // Res computes and returns residuals, as documented at RmsRes.
@@ -168,7 +173,7 @@ func (lmf *LmFit) Res() coord.SphrS {
 	// observed positions:  copy from rotated observed and fix up ra
 	so := append(coord.SphrS{}, lmf.rs...)
 	for i := range so {
-		so[i].RA += lmf.ra0
+		so[i].Lon += lmf.lon0
 	}
 	// then derotate back up to original place in the sky
 	var c coord.CartS
@@ -178,8 +183,8 @@ func (lmf *LmFit) Res() coord.SphrS {
 	sc := make(coord.SphrS, len(so))
 	for i, nt := range lmf.nTime {
 		sc[i] = coord.Sphr{
-			RA:  lmf.r0 + lmf.rr*nt + lmf.ra0,
-			Dec: lmf.d0 + lmf.dr*nt,
+			Lon: lmf.r0 + lmf.rr.Mul(nt) + lmf.lon0,
+			Lat: lmf.d0 + lmf.dr.Mul(nt),
 		}
 	}
 	sc.FromCartS(c.Mult3S(&lmf.mRot, c.FromSphrS(sc)))
@@ -187,32 +192,30 @@ func (lmf *LmFit) Res() coord.SphrS {
 	// repurpose so to hold residuals
 	for i, so1 := range so {
 		so[i] = coord.Sphr{
-			RA:  (so1.RA - sc[i].RA) * math.Cos(sc[i].Dec) / arcSecRad,
-			Dec: (so1.Dec - sc[i].Dec) / arcSecRad,
+			Lon: (so1.Lon - sc[i].Lon).Mul(sc[i].Lat.Cos()),
+			Lat: so1.Lat - sc[i].Lat,
 		}
 	}
 	return so
 }
 
-// RmsRes returns rms of 2d residuals and the component RA and dec residuals.
-//
-// Results are in arc seconds.
+// RmsRes returns rms of 2d residuals and the component Lon and dec residuals.
 //
 // Note:  The 2d residual is the 2d distance between computed and observed.
 // By contrast, it is not the rms of the ra and dec residuals considered as
 // separate values.  (The 2d distance that this function returns is smaller
 // than the rms of separate values by a factor of sqrt(2).)
-func (lmf *LmFit) RmsRes() (float64, coord.SphrS) {
+func (lmf *LmFit) RmsRes() (unit.Angle, coord.SphrS) {
 	res := lmf.Res()
 	var s float64
 	for _, r1 := range res {
-		s += r1.RA*r1.RA + r1.Dec*r1.Dec
+		s += (r1.Lon*r1.Lon + r1.Lat*r1.Lat).Rad()
 	}
-	return math.Sqrt(s / float64(len(res))), res
+	return unit.Angle(math.Sqrt(s / float64(len(res)))), res
 }
 
 // Rms returns just the rms, as documented at RmsRes.
-func (lmf *LmFit) Rms() float64 {
+func (lmf *LmFit) Rms() unit.Angle {
 	rms, _ := lmf.RmsRes()
 	return rms
 }
